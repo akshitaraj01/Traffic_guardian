@@ -15,10 +15,10 @@ The project combines a **Python/Streamlit dashboard**, an **Arduino Mega 2560**,
 - 🛡️ **Safety checks** for suspicious or unsafe control commands.
 - 📡 **Arduino hardware integration** for the physical traffic-light prototype.
 - 🚨 **Automatic anomaly alerting** in the dashboard.
-- 🔐 **Central-system compromise demonstration** automatically triggered after 5 minutes.
+- 🔐 **Central-system compromise demonstration**.
 - 🔄 **Continuous monitoring** with a 1-second dashboard refresh interval.
-- 📷 **Camera vehicle count constrained to 1–4**.
-- 📡 **Road-sensor vehicle count constrained to 1–4**.
+- 📷 **Camera vehicle count**.
+- 📡 **Road-sensor vehicle count**.
 - 🧾 **Alert/history display** for operator visibility.
 - 🖥️ Operator-focused interface with the most important system state shown prominently.
 
@@ -96,7 +96,7 @@ Resilient-Traffic-Guardian/
 │
 ├── dashboard_anomaly_auto_1to4.py   # Main Streamlit dashboard
 ├── traffic_guardian_core.py         # Controller / resilience logic
-├── <Arduino firmware>.ino            # Arduino Mega firmware
+├── arduino_traffic_controller.ino            # Arduino Mega firmware
 ├── README.md                         # Project documentation
 └── requirements.txt                  # Python dependencies (recommended)
 ```
@@ -155,23 +155,6 @@ http://localhost:8501
 
 ---
 
-## 🚨 Automatic 5-Minute Demonstration
-
-The current demonstration build is designed to run without manual attack/test buttons.
-
-When the dashboard starts:
-
-```text
-0:00  → Normal monitoring begins
-  │
-  │  Live Arduino/controller data is refreshed continuously
-  │
-5:00  → Controlled central-system compromise event is triggered
-  │
-  ▼
-🚨 CENTRAL SYSTEM HACKED — demo alert active
-```
-
 The implementation calls the controller's existing:
 
 ```python
@@ -181,21 +164,6 @@ guardian.trigger_attack("malicious_command")
 after approximately five minutes of dashboard runtime.
 
 This is intended as a **controlled project demonstration**, not as a real attack mechanism.
-
----
-
-## 📊 Vehicle Count Limits
-
-The current dashboard intentionally keeps both displayed/used live counts within the range **1 to 4**.
-
-```text
-Camera count       1 ───────────── 4
-Road sensor count  1 ───────────── 4
-```
-
-Values outside this range are clamped before being used by the dashboard display and its additional anomaly checks.
-
-This makes the prototype easier to demonstrate with a small intersection model and prevents unrealistic count values from appearing in the operator interface.
 
 ---
 
@@ -224,26 +192,8 @@ The dashboard provides:
 - Alert/history information.
 - Automatic refresh.
 - Hardware/software communication error reporting.
-- A dedicated status indicator for the 5-minute demonstration event.
-
+  
 The exact physical response, including buzzer activation, is determined by the connected controller and Arduino firmware.
-
----
-
-## 🧪 Demonstration Flow
-
-For a project presentation, the recommended demonstration sequence is:
-
-1. Start the Arduino and connect it to the computer.
-2. Start the Streamlit dashboard.
-3. Show the **Arduino Mega** connection status.
-4. Show the live camera and sensor counts.
-5. Explain that the dashboard continuously monitors the controller.
-6. Leave the system running for five minutes.
-7. At the five-minute point, the controlled compromise event is triggered automatically.
-8. Show the dashboard's **CENTRAL SYSTEM HACKED** alert.
-9. Demonstrate the physical hardware response if it is implemented in the Arduino/controller firmware.
-10. Explain how the guardian's safety logic is intended to prevent unsafe traffic-control behavior.
 
 ---
 
@@ -253,7 +203,6 @@ For a project presentation, the recommended demonstration sequence is:
 - The Arduino firmware is required for physical hardware behavior.
 - The dashboard alone cannot guarantee that the buzzer sounds unless the controller/firmware implements the corresponding command.
 - The camera count is dependent on the project's camera-processing implementation.
-- The 5-minute event is a demonstration timer based on the dashboard session runtime. Restarting the Streamlit session resets that demonstration timer.
 - The configured serial port (`COM4`) may need to be changed on another computer.
 
 ---
@@ -319,28 +268,10 @@ This connects cybersecurity, embedded systems, computer vision, sensor fusion, a
 | Arduino Mega 2560 integration | ✅ Configured |
 | Automatic monitoring | ✅ Enabled |
 | Manual attack buttons | ❌ Removed in demo build |
-| 5-minute automatic compromise demo | ✅ Implemented |
-| Camera count range | **1–4** |
-| Sensor count range | **1–4** |
 | Alert display | ✅ Implemented |
 | Hardware buzzer | ⚠️ Depends on controller/firmware |
 | Traffic-light hardware | ✅ Prototype wiring documented |
 | `traffic_guardian_core.py` | Required |
-
----
-
-## 👨‍💻 Authors / Project Team
-
-Add the project team's names, institution, department, guide/mentor, and academic year here.
-
-```text
-Project: Resilient Traffic Guardian
-Institution: ______________________________
-Department: _______________________________
-Team Members: _____________________________
-Guide/Mentor: ______________________________
-Academic Year: _____________________________
-```
 
 ---
 
