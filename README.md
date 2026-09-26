@@ -94,7 +94,7 @@ A typical project directory should contain:
 ```text
 Resilient-Traffic-Guardian/
 │
-├── dashboard_anomaly_auto_1to4.py   # Main Streamlit dashboard
+├── dashboard.py   # Main Streamlit dashboard
 ├── traffic_guardian_core.py         # Controller / resilience logic
 ├── arduino_traffic_controller.ino            # Arduino Mega firmware
 ├── README.md                         # Project documentation
