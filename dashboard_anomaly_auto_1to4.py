@@ -20,7 +20,7 @@ import pandas as pd
 
 from traffic_guardian_core import ResilientTrafficGuardian
 
-ARDUINO_PORT = "COM4"  # Arduino Mega 2560 detected on COM4
+ARDUINO_PORT = None  # <-- set this to your Arduino's serial port when ready
 
 # Your traffic-light photo, embedded directly as base64 so this single
 # file is fully self-contained -- no separate image file needed at all.
@@ -31,19 +31,12 @@ st.set_page_config(page_title="Traffic Guardian — Command Center", page_icon="
 # ---------- SESSION STATE ----------
 if "guardian" not in st.session_state:
     st.session_state.guardian = ResilientTrafficGuardian(arduino_port=ARDUINO_PORT)
-st.session_state.live = True  # Automatic monitoring is always enabled
+if "live" not in st.session_state:
+    st.session_state.live = True   # ON by default — numbers keep updating without manual toggling
 if "alert_log" not in st.session_state:
-    st.session_state.alert_log = []   # notification feed: anomaly detected / resolved
+    st.session_state.alert_log = []   # notification feed: breach detected / resolved
 if "last_mode" not in st.session_state:
     st.session_state.last_mode = "NORMAL"
-if "last_auto_issue" not in st.session_state:
-    st.session_state.last_auto_issue = None
-if "sensor_samples" not in st.session_state:
-    st.session_state.sensor_samples = []
-if "demo_started_at" not in st.session_state:
-    st.session_state.demo_started_at = time.monotonic()
-if "demo_hack_triggered" not in st.session_state:
-    st.session_state.demo_hack_triggered = False
 
 guardian = st.session_state.guardian
 
@@ -85,168 +78,68 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ---------- AUTOMATIC HARDWARE MONITORING ----------
-# No manual attack/test buttons. The dashboard continuously reads the
-# ResilientTrafficGuardian result, which is expected to come from the
-# Arduino + camera data path in traffic_guardian_core.py.
+# ---------- SIDEBAR: TEST SCENARIOS ----------
+st.sidebar.header("🧪 Test Scenarios")
+st.sidebar.caption("Simulates a realistic failure or attack so you can see how "
+                    "the system responds. No real system is affected.")
 
-st.sidebar.header("🔌 Live Hardware Connection")
-st.sidebar.success(f"Arduino Mega: **{ARDUINO_PORT}**")
-st.sidebar.caption(
-    "Automatic mode is active. No manual attack/test button is required."
-)
+if st.sidebar.button("✅ Normal Operation", width='stretch'):
+    guardian.clear_attack()
 
-refresh_rate = 1.0
-st.sidebar.metric("Refresh interval", "1.0 s")
+if st.sidebar.button("📷 Camera Feed Compromised", width='stretch'):
+    guardian.trigger_attack("camera_spoof")
 
-DEMO_DELAY_SECONDS = 5 * 60
-elapsed = time.monotonic() - st.session_state.demo_started_at
-remaining = max(0, DEMO_DELAY_SECONDS - int(elapsed))
-if st.session_state.demo_hack_triggered:
-    st.sidebar.error("🚨 CENTRAL SYSTEM HACKED — demo alert active")
-else:
-    st.sidebar.metric("Automatic anomaly in", f"{remaining // 60:02d}:{remaining % 60:02d}")
-st.sidebar.caption("📡 Arduino → dashboard → automatic 5-minute central-system compromise demo")
+if st.sidebar.button("🖥️ Unsafe Command from Central", width='stretch'):
+    guardian.trigger_attack("malicious_command")
 
-# ---------- AUTOMATIC 5-MINUTE CENTRAL-SYSTEM COMPROMISE ----------
-# This is a controlled demo event. It exercises the existing guardian
-# malicious-command path instead of inventing a separate dashboard-only state.
-if not st.session_state.demo_hack_triggered and elapsed >= DEMO_DELAY_SECONDS:
-    try:
-        guardian.trigger_attack("malicious_command")
-        st.session_state.demo_hack_triggered = True
-    except Exception as exc:
-        st.session_state.demo_hack_triggered = True
-        st.session_state.demo_hack_error = str(exc)
+if st.sidebar.button("🔌 Central System Offline", width='stretch'):
+    guardian.trigger_attack("server_down")
 
-# ---------- RUN ONE TICK AUTOMATICALLY ----------
-try:
+st.sidebar.divider()
+st.session_state.live = st.sidebar.toggle("▶️ Live monitoring", value=st.session_state.live)
+refresh_rate = st.sidebar.slider("Refresh interval (seconds)", 0.5, 3.0, 1.0, 0.5)
+manual_tick = st.sidebar.button("⏭️ Advance one step (manual)", width='stretch')
+
+# ---------- RUN ONE TICK ----------
+if st.session_state.live or manual_tick:
     result = guardian.tick()
-    hardware_error = None
-except Exception as exc:
-    result = guardian.history[-1] if guardian.history else None
-    hardware_error = str(exc)
-
-if hardware_error:
-    st.error(
-        f"🚨 **Hardware/software communication error:** {hardware_error}"
-    )
-if getattr(st.session_state, "demo_hack_error", None):
-    st.error(f"🚨 Automatic Arduino attack trigger failed: {st.session_state.demo_hack_error}")
+else:
+    result = guardian.history[-1] if guardian.history else guardian.tick()
 
 
-def _bounded_count(value, default=1):
-    """Keep displayed/used vehicle counts strictly between 1 and 4."""
-    try:
-        n = int(round(float(value)))
-    except (TypeError, ValueError):
-        n = default
-    return max(1, min(4, n))
+def _breach_reason(r):
+    if r.mode == "SAFE_MODE":
+        return "Central control link lost — intersection switched to local safe mode."
+    if not r.safety_check.ok:
+        return f"Unsafe command rejected — {r.safety_check.reason}"
+    if not r.sensor_check.ok:
+        label = {"camera": "Camera", "sensor": "Road sensor"}
+        bypassed = label.get(r.sensor_check.bypassed_source, "A sensor")
+        return f"{bypassed} data bypassed — {r.sensor_check.reason}"
+    return "Anomaly detected."
 
 
-def _automatic_issue(r, comm_error=None):
-    """Return a live issue, including the timed central-system demo."""
-    if st.session_state.demo_hack_triggered:
-        return "Central system hacked — automatic demo attack is active."
-
-    if comm_error:
-        return f"Arduino communication error: {comm_error}"
-
-    if r is None:
-        return "No live controller reading is available."
-
-    if getattr(r, "mode", "NORMAL") == "SAFE_MODE":
-        return "Arduino/central control link is unavailable — safe mode is active."
-
-    safety = getattr(r, "safety_check", None)
-    if safety is not None and not safety.ok:
-        return f"Unsafe signal command detected and rejected: {safety.reason}"
-
-    sensor = getattr(r, "sensor_check", None)
-    if sensor is not None and not sensor.ok:
-        bypassed = {"camera": "camera", "sensor": "road sensor"}.get(
-            sensor.bypassed_source, "sensor"
-        )
-        return f"Sensor mismatch detected — {bypassed} data is being bypassed: {sensor.reason}"
-
-    behavior = getattr(r, "behavior_check", None)
-    if behavior is not None and not behavior.ok:
-        return f"Traffic behavior anomaly detected: {behavior.reason}"
-
-    # Additional automatic check using the actual live Arduino value.
-    raw_sensor_count = getattr(r, "sensor_count", None)
-    raw_camera_count = getattr(r, "camera_count", None)
-    baseline = getattr(r, "baseline", None)
-
-    # For the dashboard/demo, vehicle counts are always kept in the 1–4 range.
-    sensor_count = _bounded_count(raw_sensor_count)
-    camera_count = _bounded_count(raw_camera_count)
-
-    samples = st.session_state.sensor_samples
-    samples.append(float(sensor_count))
-    st.session_state.sensor_samples = samples[-12:]
-
-    if camera_count is not None:
-        diff = abs(float(sensor_count) - float(camera_count))
-        scale = max(abs(float(sensor_count)), abs(float(camera_count)), 1.0)
-        # Require both a meaningful vehicle-count difference and a
-        # meaningful relative difference to avoid noisy one-car alerts.
-        if diff >= 3 and (diff / scale) >= 0.40:
-            return (
-                f"Live sensor disagreement: Arduino reports {sensor_count} "
-                f"vehicles while camera reports {camera_count}."
-            )
-
-    if isinstance(baseline, (int, float)) and float(baseline) > 0:
-        deviation = abs(float(sensor_count) - float(baseline)) / float(baseline)
-        if deviation >= 1.0:
-            return (
-                f"Live Arduino count is unusually far from the expected "
-                f"baseline ({sensor_count} vs {baseline})."
-            )
-
-    if len(samples) >= 4:
-        recent = samples[-4:]
-        if max(recent) - min(recent) >= 2:
-            return (
-                "Sudden traffic-count change detected from the Arduino "
-                f"sensor ({recent[-2]:g} → {recent[-1]:g})."
-            )
-
-    return None
-
-
-auto_issue = _automatic_issue(result, hardware_error)
-auto_mode = "SAFE_MODE" if hardware_error else (
-    "DEGRADED" if auto_issue else "NORMAL"
-)
-
-# Alert only when the automatic condition changes, so the dashboard does not
-# spam a new alert every second while the same problem persists.
-if auto_issue and st.session_state.last_auto_issue is None:
+# ---------- BREACH DETECTION -> ACTIVE ALERTING ----------
+# Fires the instant the system transitions INTO or OUT OF a breach state,
+# rather than just showing a static banner — this is what makes it an
+# alerting system rather than a passive dashboard.
+if result.mode != "NORMAL" and st.session_state.last_mode == "NORMAL":
+    reason = _breach_reason(result)
     ts = datetime.datetime.now().strftime("%H:%M:%S")
     st.session_state.alert_log.insert(0, {
-        "time": ts,
-        "type": "BREACH",
-        "mode": auto_mode,
-        "reason": auto_issue,
+        "time": ts, "type": "BREACH", "mode": result.mode, "reason": reason,
     })
-    st.toast(f"🚨 Automatic anomaly detected: {auto_issue}", icon="🚨")
-
-elif auto_issue is None and st.session_state.last_auto_issue is not None:
+    st.toast(f"🚨 Breach detected: {reason}", icon="🚨")
+elif result.mode == "NORMAL" and st.session_state.last_mode != "NORMAL":
     ts = datetime.datetime.now().strftime("%H:%M:%S")
     st.session_state.alert_log.insert(0, {
-        "time": ts,
-        "type": "RESOLVED",
-        "mode": "NORMAL",
-        "reason": "Automatic anomaly cleared — live readings returned to normal.",
+        "time": ts, "type": "RESOLVED", "mode": "NORMAL",
+        "reason": "System returned to normal operation.",
     })
-    st.toast("✅ Automatic anomaly cleared.", icon="✅")
+    st.toast("✅ Situation resolved — system back to normal.", icon="✅")
 
-st.session_state.last_auto_issue = auto_issue
-st.session_state.last_mode = auto_mode
+st.session_state.last_mode = result.mode
 st.session_state.alert_log = st.session_state.alert_log[:20]
-
 
 # =====================================================================
 # TOP STATUS BANNER — the one thing an officer needs to see instantly
@@ -259,14 +152,7 @@ BANNER = {
     "SAFE_MODE": ("#8f1f1f", "🚨  SAFE MODE ACTIVE — INTERSECTION PROTECTED",
                   "Central connection lost. The intersection is running on a pre-approved fixed timing and remains safe."),
 }
-if st.session_state.demo_hack_triggered:
-    color, headline, subtext = (
-        "#7f0000",
-        "🚨  CENTRAL SYSTEM HACKED — ALERT ACTIVE",
-        "The automatic 5-minute demo compromise is active. The dashboard is alerting and the existing Arduino malicious-command response path has been triggered.",
-    )
-else:
-    color, headline, subtext = BANNER.get(auto_mode, BANNER["NORMAL"])
+color, headline, subtext = BANNER.get(result.mode, BANNER["NORMAL"])
 
 st.markdown(
     f"""
@@ -282,8 +168,6 @@ st.markdown(
 # ALERTS FEED — the notification log an officer actually needs
 # =====================================================================
 st.subheader("🔔 Recent Alerts")
-if st.session_state.demo_hack_triggered:
-    st.error("🚨 CENTRAL SYSTEM HACKED: automatic demo alert is active. The Arduino alert path has been triggered.")
 
 if not st.session_state.alert_log:
     st.caption("No alerts yet. This feed fills the instant a breach is detected.")
@@ -308,13 +192,9 @@ st.divider()
 st.subheader("What each sensor currently reports")
 
 sc1, sc2, sc3 = st.columns(3)
-camera_count = _bounded_count(getattr(result, "camera_count", 1))
-sensor_count = _bounded_count(getattr(result, "sensor_count", 1))
-baseline_count = _bounded_count(getattr(result, "baseline", 1))
-
-sc1.metric("📷 Camera count", camera_count)
-sc2.metric("📡 Road sensor count", sensor_count)
-sc3.metric("📊 Expected baseline", baseline_count)
+sc1.metric("📷 Camera count", result.camera_count)
+sc2.metric("📡 Road sensor count", result.sensor_count)
+sc3.metric("📊 Expected baseline", result.baseline)
 
 if not result.sensor_check.ok:
     bypassed = result.sensor_check.bypassed_source
@@ -326,10 +206,7 @@ if not result.sensor_check.ok:
         f"The system is relying on **{label[trusted]}** instead."
     )
 else:
-    if auto_issue:
-        st.warning(f"⚠️ **Automatic monitoring:** {auto_issue}")
-    else:
-        st.success("✅ Both sources agree — camera and road sensor data verified.")
+    st.success("✅ Both sources agree — camera and road sensor data verified.")
 
 st.divider()
 
@@ -361,7 +238,7 @@ with ic3:
 
 st.markdown("**Why the signal is timed this way**")
 comp1, comp2 = st.columns(2)
-main_count = max(camera_count, sensor_count) if not result.sensor_check.ok else sensor_count
+main_count = max(result.camera_count, result.sensor_count) if not result.sensor_check.ok else result.sensor_count
 with comp1:
     st.markdown(f"Main Street: **{main_count} vehicles** → **{result.green_a_applied}s** green")
     st.progress(min(1.0, result.green_a_applied / 45))
@@ -377,13 +254,7 @@ st.divider()
 # =====================================================================
 st.subheader("System Response")
 
-if auto_issue:
-    st.error(
-        f"**Automatic anomaly detected:** {auto_issue} "
-        "The dashboard raised this alert from live controller/sensor data; "
-        "no manual scenario button was used."
-    )
-elif result.mode == "SAFE_MODE":
+if result.mode == "SAFE_MODE":
     st.error(
         "**Action taken:** Central control link is down. The intersection controller "
         "has switched to a **safe, fixed timing** on its own — it does not need the "
@@ -438,8 +309,8 @@ with st.expander("🔧 Technical detail (for engineers / judges' Q&A)"):
     for r in guardian.history[-15:][::-1]:
         rows.append({
             "Mode": r.mode,
-            "Camera": _bounded_count(getattr(r, "camera_count", 1)),
-            "Sensor": _bounded_count(getattr(r, "sensor_count", 1)),
+            "Camera": r.camera_count,
+            "Sensor": r.sensor_count,
             "Confidence %": r.trust_score,
             "Note": r.sensor_check.reason if not r.sensor_check.ok else
                     (r.behavior_check.reason if not r.behavior_check.ok else
@@ -448,6 +319,6 @@ with st.expander("🔧 Technical detail (for engineers / judges' Q&A)"):
     st.dataframe(pd.DataFrame(rows), width='stretch', hide_index=True)
 
 # ---------- LIVE LOOP ----------
-# Always refresh because this dashboard is now hardware-driven.
-time.sleep(refresh_rate)
-st.rerun()
+if st.session_state.live:
+    time.sleep(refresh_rate)
+    st.rerun()
