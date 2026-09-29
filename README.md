@@ -26,9 +26,8 @@ The project combines a **Python/Streamlit dashboard**, an **Arduino Mega 2560**,
 
 ## 🏗️ System Architecture
 
-```text
                     ┌──────────────────────┐
-                    │      Camera Feed      │
+                    │      Camera Feed     │
                     │  Vehicle Detection   │
                     └──────────┬───────────┘
                                │
@@ -49,14 +48,13 @@ The project combines a **Python/Streamlit dashboard**, an **Arduino Mega 2560**,
                                             │
                          ┌──────────────────┼──────────────────┐
                          ▼                  ▼                  ▼
-                  Traffic Lights        Buzzer          Warning LED
-
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │ Streamlit Dashboard  │
-                    │ Command Center       │
-                    └──────────────────────┘
+                  Traffic Lights          Buzzer          Warning LED
+                         │
+                         ▼
+              ┌──────────────────────┐
+              │ Streamlit Dashboard  │
+              │ Command Center       │
+              └──────────────────────┘
 ```
 
 The dashboard is the operator-facing layer. The controller is responsible for interpreting the live inputs and applying its safety logic before hardware actions are taken.
@@ -94,11 +92,11 @@ A typical project directory should contain:
 ```text
 Resilient-Traffic-Guardian/
 │
-├── dashboard.py   # Main Streamlit dashboard
-├── traffic_guardian_core.py         # Controller / resilience logic
+├── dashboard.py                              # Main Streamlit dashboard
+├── traffic_guardian_core.py                  # Controller / resilience logic
 ├── arduino_traffic_controller.ino            # Arduino Mega firmware
-├── README.md                         # Project documentation
-└── requirements.txt                  # Python dependencies (recommended)
+├── README.md                                 # Project documentation
+└── requirements.txt                          # Python dependencies (recommended)
 ```
 
 The exact Arduino firmware filename may differ depending on the project version.
@@ -144,7 +142,7 @@ ARDUINO_PORT = "COM4"
 6. Start Streamlit:
 
 ```bash
-streamlit run dashboard_anomaly_auto_1to4.py
+streamlit run dashboard.py
 ```
 
 7. Open the local Streamlit address shown in the terminal, normally:
@@ -152,18 +150,6 @@ streamlit run dashboard_anomaly_auto_1to4.py
 ```text
 http://localhost:8501
 ```
-
----
-
-The implementation calls the controller's existing:
-
-```python
-guardian.trigger_attack("malicious_command")
-```
-
-after approximately five minutes of dashboard runtime.
-
-This is intended as a **controlled project demonstration**, not as a real attack mechanism.
 
 ---
 
@@ -233,7 +219,7 @@ Then restart Streamlit.
 
 Check the camera connection and the camera-processing implementation used by `traffic_guardian_core.py`.
 
-### Buzzer does not activate during the demo
+### Buzzer does not activate
 
 The dashboard triggers the guardian's `malicious_command` attack path, but physical buzzer behavior is not guaranteed by the dashboard code alone. Verify the Arduino firmware and the corresponding controller-to-Arduino command handling.
 
@@ -243,7 +229,7 @@ Try:
 
 ```bash
 python -m pip install --upgrade streamlit pandas
-streamlit run dashboard_anomaly_auto_1to4.py
+streamlit run dashboard.py
 ```
 
 ---
@@ -274,11 +260,3 @@ This connects cybersecurity, embedded systems, computer vision, sensor fusion, a
 | `traffic_guardian_core.py` | Required |
 
 ---
-
-## 📜 License
-
-Add the project's chosen license here if required by your institution or project team.
-
-```text
-License: _________________________________
-```
